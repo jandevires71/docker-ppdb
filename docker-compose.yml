@@ -60,13 +60,14 @@ services:
 
   python:
     build: ./python
-    command: python -m http.server 8000
+    command: jupyter notebook --ip=0.0.0.0 --port=8000 --allow-root
     depends_on:
       - postgres
     volumes:
       - ./python/script:/usr/src/app
       - ./python/logs:/var/log/app
       - ./data:/data
+      - ./python/jupyter:/root/.jupyter
     ports:
       - "8000:8000"
     environment:
@@ -100,6 +101,54 @@ services:
       - "traefik.enable=true"
       - "traefik.port=9000"
       - ${MINIO_URL_CONFIG:-traefik.frontend.rule=Host:minio.ppdb.naturalis.nl}
+
+  elasticsearch:
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: $ELK_VERSION
+    volumes:
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+    networks:
+      - default
+
+  logstash:
+    build:
+      context: logstash/
+      args:
+        ELK_VERSION: $ELK_VERSION
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    ports:
+      - "5000:5000"
+      - "9600:9600"
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    networks:
+      - default
+      - pgnet
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    build:
+      context: kibana/
+      args:
+        ELK_VERSION: $ELK_VERSION
+    volumes:
+      - ./kibana/config/:/usr/share/kibana/config:ro
+    ports:
+      - "5601:5601"
+    networks:
+      - default
+    depends_on:
+      - elasticsearch
 
 networks:
   pgnet:
